@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>بوصلة القبلة الهادئة | محمد العلالي</title>
+    <title>بوصلة القبلة المستقرة | محمد العلالي</title>
     <style>
         :root {
             --gold: #d4af37;
@@ -41,6 +41,7 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
 
+        /* سهم مقدمة الجوال الثابت */
         .target-arrow {
             position: absolute;
             top: -25px;
@@ -54,7 +55,6 @@
         .kaaba-pivot {
             position: absolute;
             width: 100%; height: 100%;
-            /* إلغاء الـ transition القديم واستخدام الحساب البرمجي للتنعيم */
             will-change: transform;
             z-index: 5;
         }
@@ -65,20 +65,19 @@
             left: 50%;
             transform: translateX(-50%);
             font-size: 45px;
-            transition: filter 0.3s;
+            transition: transform 0.2s ease-out;
         }
 
         .info-panel {
             text-align: center;
             margin-top: 50px;
-            padding: 0 20px;
         }
 
         #direction-text {
             font-size: 18px;
             font-weight: bold;
             color: var(--dark);
-            height: 30px;
+            margin-bottom: 10px;
         }
 
         .btn-designer {
@@ -88,12 +87,13 @@
             padding: 12px 30px;
             border-radius: 50px;
             font-weight: bold;
-            margin-top: 20px;
             cursor: pointer;
         }
 
-        .perfect-match {
-            filter: drop-shadow(0 0 10px gold);
+        /* تأثير الوهج عند الوصول للقبلة */
+        .perfect {
+            filter: drop-shadow(0 0 15px #ffd700);
+            transform: translateX(-50%) scale(1.1);
         }
     </style>
 </head>
@@ -108,7 +108,7 @@
     </div>
 
     <div class="info-panel">
-        <div id="direction-text">جاري المعايرة...</div>
+        <div id="direction-text">انتظر تحديد الموقع...</div>
         <button class="btn-designer" onclick="alert('إهداء للجميع - المصمم محمد العلالي')">المصمم محمد العلالي</button>
     </div>
 
@@ -116,15 +116,18 @@
     const pivot = document.getElementById('kaabaPivot');
     const kaabaImg = document.getElementById('kaabaImg');
     const dirText = document.getElementById('direction-text');
-    const kaabaCoords = { lat: 21.4225, lng: 39.8262 };
-
+    
     let qiblaAngle = 0;
-    let currentRotation = 0;
-    let lerpFactor = 0.1; // عامل التنعيم (كلما صغر زاد الهدوء وقل الاهتزاز)
+    let currentHeading = 0;
+    let targetHeading = 0;
+    const lerpSpeed = 0.05; // سرعة التنعيم (تقليل هذا الرقم يقتل الهستيريا تماماً)
 
-    function calculateQibla(lat, lng) {
-        const phiK = kaabaCoords.lat * Math.PI / 180;
-        const lambdaK = kaabaCoords.lng * Math.PI / 180;
+    // إحداثيات الكعبة
+    const kaabaLoc = { lat: 21.4225, lng: 39.8262 };
+
+    function getQiblaAngle(lat, lng) {
+        const phiK = kaabaLoc.lat * Math.PI / 180;
+        const lambdaK = kaabaLoc.lng * Math.PI / 180;
         const phi = lat * Math.PI / 180;
         const lambda = lng * Math.PI / 180;
         const y = Math.sin(lambdaK - lambda);
@@ -132,51 +135,53 @@
         return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
     }
 
-    // الحصول على الموقع
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
-            qiblaAngle = calculateQibla(pos.coords.latitude, pos.coords.longitude);
-            dirText.innerText = "ضع الجوال بوضعية مسطحة";
-            initCompass();
-        }, () => { dirText.innerText = "GPS مطلوب للقة"; });
+            qiblaAngle = getQiblaAngle(pos.coords.latitude, pos.coords.longitude);
+            dirText.innerText = "حرك الجوال ببطء";
+            window.addEventListener('deviceorientationabsolute', updateCompass, true);
+            window.addEventListener('deviceorientation', updateCompass, true);
+            animate(); // بدء حلقة الحركة الناعمة
+        });
     }
 
-    function initCompass() {
-        if (window.DeviceOrientationEvent) {
-            window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-            window.addEventListener('deviceorientation', handleOrientation, true);
-        }
-    }
-
-    function handleOrientation(e) {
+    function updateCompass(e) {
         let heading = e.webkitCompassHeading || e.alpha;
         if (heading === null) return;
+        targetHeading = heading;
+    }
 
-        // الاتجاه المستهدف
-        let targetRotation = qiblaAngle - heading;
-
-        // معالجة مشكلة القفز عند زاوية 360/0
-        if (Math.abs(targetRotation - currentRotation) > 180) {
-            if (targetRotation > currentRotation) currentRotation += 360;
-            else currentRotation -= 360;
-        }
-
-        // تطبيق التنعيم (الـ Lerp) لمنع الهستيريا
-        currentRotation = currentRotation + (targetRotation - currentRotation) * lerpFactor;
+    function animate() {
+        // حساب الفرق بين الزاوية الحالية والزاوية المستهدفة
+        let diff = targetHeading - currentHeading;
         
-        pivot.style.transform = `rotate(${currentRotation}deg)`;
+        // تصحيح الدوران عبر نقطة الصفر
+        if (diff > 180) diff -= 360;
+        if (diff < -180) diff += 360;
 
-        // التحقق من الدقة
-        let diff = Math.abs((targetRotation % 360 + 360) % 360);
-        if (diff < 3 || diff > 357) {
-            kaabaImg.classList.add('perfect-match');
-            dirText.innerText = "باتجاه القبلة الآن ✅";
-            dirText.style.color = "var(--green)";
+        // تطبيق التنعيم القوي (Lerp)
+        currentHeading += diff * lerpSpeed;
+
+        // تدوير الكعبة (زاوية القبلة ناقص اتجاه الشمال الحالي)
+        const finalRotation = qiblaAngle - currentHeading;
+        pivot.style.transform = `rotate(${finalRotation}deg)`;
+
+        // التحقق من الوصول للقبلة (دقة 3 درجات)
+        const checkMatch = Math.abs(finalRotation % 360);
+        if (checkMatch < 3 || checkMatch > 357) {
+            if (!kaabaImg.classList.contains('perfect')) {
+                kaabaImg.classList.add('perfect');
+                dirText.innerText = "أنت باتجاه القبلة ✅";
+                dirText.style.color = "var(--green)";
+                if (navigator.vibrate) navigator.vibrate(100); // هز الجوال 100 مللي ثانية
+            }
         } else {
-            kaabaImg.classList.remove('perfect-match');
-            dirText.innerText = "حرك الجوال ببطء";
+            kaabaImg.classList.remove('perfect');
+            dirText.innerText = "حرك الجوال باتجاه السهم";
             dirText.style.color = "var(--dark)";
         }
+
+        requestAnimationFrame(animate); // استدعاء الوظيفة في الإطار القادم (نعومة 60 إطار في الثانية)
     }
 </script>
 
